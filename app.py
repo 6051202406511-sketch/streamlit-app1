@@ -59,6 +59,9 @@ if add_button and task_input.strip():
 
 # フィルター設定
 st.divider()
+
+# Issue #5: タスクのフィルター表示機能
+# ステータスに応じたタスク表示のフィルタリングを実装
 filter_option = st.radio(
     "表示するタスク",
     ["すべて", "未完了", "完了"],
