@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>月面けり算ゲーム</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --ink: #f8f4ff;
+      --muted: #b8acd0;
+      --panel: rgba(27, 24, 55, .88);
+      --accent: #ffd166;
+      --good: #8ef0b1;
+      --bad: #ff8c9d;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: system-ui, -apple-system, "Yu Gothic", sans-serif;
+      color: var(--ink);
+      background: radial-gradient(circle at 50% 0, #4c4a91 0, #18152e 52%, #0c0b1a 100%);
+    }
+    main { width: min(760px, 100%); margin: 0 auto; padding: 18px 14px 30px; }
+    h1 { margin: 0 0 10px; font-size: clamp(1.35rem, 5vw, 2rem); text-align: center; }
+    .stats, .question-card, .game {
+      background: var(--panel);
+      border: 1px solid rgba(255,255,255,.13);
+      border-radius: 16px;
+      box-shadow: 0 12px 32px rgba(0,0,0,.22);
+    }
+    .stats { display: flex; justify-content: space-around; gap: 8px; padding: 10px; margin-bottom: 12px; }
+    .stat { text-align: center; min-width: 0; }
+    .stat-label { display: block; color: var(--muted); font-size: .78rem; }
+    .stat-value { display: block; color: var(--accent); font-size: 1.25rem; font-weight: 700; }
+    .question-card { padding: 16px; margin-bottom: 12px; text-align: center; }
+    #question { margin: 0 0 12px; font-size: clamp(1.5rem, 7vw, 2.5rem); letter-spacing: .08em; }
+    #message { min-height: 1.4em; margin: 8px 0 0; color: var(--muted); }
+    .answers { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+    button { border: 0; border-radius: 10px; padding: 12px 8px; color: #171329; background: #fff; font: inherit; font-weight: 700; cursor: pointer; touch-action: manipulation; }
+    button:hover, button:focus-visible { filter: brightness(1.1); outline: 3px solid rgba(255,209,102,.55); }
+    button:disabled { cursor: default; opacity: .65; }
+    .game { position: relative; min-height: 270px; overflow: hidden; background: linear-gradient(#262451, #111027); }
+    .moon { position: absolute; left: 50%; top: 20px; width: 116px; height: 116px; transform: translateX(-50%); border-radius: 50%; background: #f5e8b8; box-shadow: 0 0 34px rgba(255,239,179,.55); }
+    .moon::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: rgba(65,61,113,.78); transform-origin: 0 50%; transition: transform .45s ease; }
+    .moon[data-phase="0"]::after { transform: translateX(0); }
+    .moon[data-phase="1"]::after { transform: translateX(48%); }
+    .moon[data-phase="2"]::after { transform: translateX(100%); }
+    .moon[data-phase="3"]::after { transform: translateX(48%); }
+    .stars { position: absolute; inset: 0; opacity: .7; background-image: radial-gradient(#fff 1px, transparent 1px); background-size: 47px 41px; }
+    .actor, .enemy { position: absolute; bottom: 26px; height: 90px; width: auto; object-fit: contain; image-rendering: pixelated; user-select: none; -webkit-user-drag: none; }
+    .actor { left: 16%; transform: translateX(-50%); z-index: 3; transition: left .24s ease, transform .24s ease; }
+    .actor.kicking { left: 42%; transform: translateX(-50%) scale(1.08); }
+    .enemy { right: 14%; transform: translateX(50%); z-index: 2; opacity: 1; }
+    .enemy.hit-anim { animation: hit-anim .78s cubic-bezier(.2,.8,.25,1) forwards; }
+    .enemy.enemy-appear { animation: enemy-appear .45s ease both; }
+    @keyframes hit-anim {
+      0% { opacity: 1; transform: translateX(50%) rotate(0) scale(1); }
+      100% { opacity: 0; transform: translate(190px, -145px) rotate(560deg) scale(.35); }
+    }
+    @keyframes enemy-appear { from { opacity: 0; transform: translateX(50%) translateY(14px) scale(.7); } to { opacity: 1; transform: translateX(50%) translateY(0) scale(1); } }
+    .ground { position: absolute; right: 7%; bottom: 19px; left: 7%; height: 7px; border-radius: 50%; background: #534a70; }
+    .hint { margin: 10px 0 0; color: var(--muted); font-size: .85rem; text-align: center; }
+    @media (max-width: 420px) { .actor, .enemy { height: 82px; } .game { min-height: 240px; } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>月面けり算ゲーム</h1>
+    <section class="stats" aria-label="ゲーム状況">
+      <div class="stat"><span class="stat-label">正解</span><span class="stat-value" id="score">0</span></div>
+      <div class="stat"><span class="stat-label">団子</span><span class="stat-value" id="dango">0</span></div>
+      <div class="stat"><span class="stat-label">月齢</span><span class="stat-value" id="phase-label">新月</span></div>
+    </section>
+    <section class="question-card">
+      <p id="question" aria-live="polite">読み込み中</p>
+      <div class="answers" id="answers" role="group" aria-label="答え"></div>
+      <p id="message" aria-live="polite"></p>
+      <p class="hint">数字キー 1〜4 / Space・Enter / ボタン・画面タップで回答</p>
+    </section>
+    <section class="game" aria-label="月面">
+      <div class="stars"></div>
+      <div class="moon" id="moon" data-phase="0" aria-hidden="true"></div>
+      <div class="ground"></div>
+      <img class="actor" id="rabbit" src="rabbit_idle.png" alt="うさぎ">
+      <img class="enemy" id="enemy" src="enemy.png1.png" alt="敵">
+    </section>
+  </main>
+  <script>
+    (() => {
+      const rabbit = document.getElementById("rabbit");
+      const enemy = document.getElementById("enemy");
+      const answerArea = document.getElementById("answers");
+      const question = document.getElementById("question");
+      const message = document.getElementById("message");
+      const score = document.getElementById("score");
+      const dango = document.getElementById("dango");
+      const moon = document.getElementById("moon");
+      const phaseLabel = document.getElementById("phase-label");
+      const phases = ["新月", "上弦の月", "満月", "下弦の月"];
+      const enemyImages = ["enemy.png1.png", "enemy.png2.png"];
+      let currentAnswer = 0;
+      let answered = false;
+      let scoreValue = 0;
+      let dangoValue = 0;
+      let phase = 0;
+
+      function randomEnemy() {
+        enemy.src = enemyImages[Math.floor(Math.random() * enemyImages.length)];
+      }
+
+      function nextQuestion() {
+        const left = Math.floor(Math.random() * 8) + 2;
+        const right = Math.floor(Math.random() * 8) + 2;
+        currentAnswer = left + right;
+        const choices = new Set([currentAnswer]);
+        while (choices.size < 4) choices.add(Math.max(1, currentAnswer + Math.floor(Math.random() * 9) - 4));
+        const shuffled = [...choices].sort(() => Math.random() - .5);
+        question.textContent = `${left} + ${right} = ?`;
+        answerArea.replaceChildren(...shuffled.map((value, index) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.textContent = value;
+          button.dataset.index = index + 1;
+          button.addEventListener("click", () => answer(value));
+          return button;
+        }));
+        answered = false;
+        randomEnemy();
+        enemy.classList.remove("hit-anim", "enemy-appear");
+        void enemy.offsetWidth;
+        enemy.classList.add("enemy-appear");
+      }
+
+      function answer(value) {
+        if (answered) return;
+        answered = true;
+        rabbit.src = "rabbit_kick.png";
+        rabbit.classList.add("kicking");
+        if (value === currentAnswer) {
+          scoreValue += 1;
+          dangoValue += 3;
+          phase = (phase + 1) % phases.length;
+          score.textContent = scoreValue;
+          dango.textContent = dangoValue;
+          phaseLabel.textContent = phases[phase];
+          moon.dataset.phase = phase;
+          message.textContent = "正解！ うさぎキック！";
+          message.style.color = "var(--good)";
+          enemy.classList.add("hit-anim");
+        } else {
+          message.textContent = `おしい！ 正解は ${currentAnswer}`;
+          message.style.color = "var(--bad)";
+        }
+        window.setTimeout(() => {
+          rabbit.classList.remove("kicking");
+          rabbit.src = "rabbit_idle.png";
+        }, 420);
+        window.setTimeout(nextQuestion, 820);
+      }
+
+      document.addEventListener("keydown", (event) => {
+        if (event.key >= "1" && event.key <= "4") {
+          const button = answerArea.querySelector(`[data-index="${event.key}"]`);
+          if (button) answer(Number(button.textContent));
+        } else if (event.key === " " || event.key === "Enter") {
+          event.preventDefault();
+          const first = answerArea.querySelector("button");
+          if (first) answer(Number(first.textContent));
+        }
+      });
+      nextQuestion();
+    })();
+  </script>
+</body>
+</html>
